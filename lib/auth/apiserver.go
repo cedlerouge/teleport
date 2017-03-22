@@ -87,7 +87,7 @@ func NewAPIServer(config *APIConfig) http.Handler {
 	srv.GET("/:version/users/:user/web/sessions/:sid", srv.withAuth(srv.getWebSession))
 	srv.DELETE("/:version/users/:user/web/sessions/:sid", srv.withAuth(srv.deleteWebSession))
 	srv.GET("/:version/signuptokens/:token", srv.withAuth(srv.getSignupTokenData))
-	srv.POST("/:version/signuptokens/users", srv.withAuth(srv.createUserWithToken))
+	srv.POST("/:version/signuptokens/users", srv.withAuth(srv.createLocalUser))
 	srv.POST("/:version/signuptokens", srv.withAuth(srv.createSignupToken))
 
 	// Servers and presence heartbeat
@@ -951,25 +951,37 @@ func (s *APIServer) createSignupToken(auth ClientI, w http.ResponseWriter, r *ht
 	return token, nil
 }
 
-type createUserWithTokenReq struct {
+type createLocalUserReq struct {
 	Token    string `json:"token"`
 	Password string `json:"password"`
 	OTPToken string `json:"otp_token"`
 }
 
-func (s *APIServer) createUserWithToken(auth ClientI, w http.ResponseWriter, r *http.Request, p httprouter.Params, version string) (interface{}, error) {
-	var req *createUserWithTokenReq
+func (s *APIServer) createLocalUser(auth ClientI, w http.ResponseWriter, r *http.Request, p httprouter.Params, version string) (interface{}, error) {
+	var req *createLocalUserReq
 	if err := httplib.ReadJSON(r, &req); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	sess, err := auth.CreateUserWithToken(req.Token, req.Password, req.OTPToken)
+	cap, err := auth.GetClusterAuthPreference()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	var webSession services.WebSession
+
+	switch cap.GetSecondFactor() {
+	case "off":
+		webSession, err = auth.CreateUserWithoutSecondFactor(req.Token, req.Password)
+	case "otp", "totp", "hotp":
+		webSession, err = auth.CreateUserWithToken(req.Token, req.Password, req.OTPToken)
+	}
 	if err != nil {
 		log.Error(trace.DebugReport(err))
 		return nil, trace.Wrap(err)
 	}
 
-	return rawMessage(services.GetWebSessionMarshaler().MarshalWebSession(sess, services.WithVersion(version)))
+	return rawMessage(services.GetWebSessionMarshaler().MarshalWebSession(webSession, services.WithVersion(version)))
 }
 
 type createUserWithU2FTokenReq struct {

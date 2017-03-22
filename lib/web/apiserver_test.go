@@ -322,6 +322,15 @@ func (s *WebSuite) TearDownTest(c *C) {
 }
 
 func (s *WebSuite) TestNewUser(c *C) {
+	// configure cluster authentication preferences
+	cap, err := services.NewAuthPreference(services.AuthPreferenceSpecV2{
+		Type:         teleport.Local,
+		SecondFactor: teleport.OTP,
+	})
+	c.Assert(err, IsNil)
+	err = authServer.SetClusterAuthPreference(cap)
+	c.Assert(err, IsNil)
+
 	token, err := s.roleAuth.CreateSignupToken(services.UserV1{Name: "bob", AllowedLogins: []string{s.user}})
 	c.Assert(err, IsNil)
 

@@ -474,11 +474,24 @@ func (s *AuthTunnel) passwordAuth(
 	log.Infof("[AUTH] login attempt: user %q type %q", conn.User(), ab.Type)
 
 	switch ab.Type {
-	// regular user is trying to get in using his password+OTP token:
+	// user is trying to get in using his password only
 	case AuthWebPassword:
-		if err := s.authServer.CheckPassword(conn.User(), ab.Pass, ab.OTPToken); err != nil {
+		cap, err := s.authServer.GetClusterAuthPreference()
+		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+
+		switch cap.GetSecondFactor() {
+		case "off":
+			if err := s.authServer.CheckPasswordWOToken(conn.User(), ab.Pass); err != nil {
+				return nil, trace.Wrap(err)
+			}
+		case "otp", "totp", "hotp":
+			if err := s.authServer.CheckPassword(conn.User(), ab.Pass, ab.OTPToken); err != nil {
+				return nil, trace.Wrap(err)
+			}
+		}
+
 		perms := &ssh.Permissions{
 			Extensions: map[string]string{
 				ExtWebPassword:         "<password>",

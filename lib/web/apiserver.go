@@ -829,7 +829,7 @@ func (m *Handler) createSessionWithU2FSignResponse(w http.ResponseWriter, r *htt
 type createNewUserReq struct {
 	InviteToken       string `json:"invite_token"`
 	Pass              string `json:"pass"`
-	SecondFactorToken string `json:"second_factor_token"`
+	SecondFactorToken string `json:"second_factor_token,omitempty"`
 }
 
 // createNewUser creates new user entry based on the invite token

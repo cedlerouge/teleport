@@ -796,11 +796,24 @@ func (c *Client) GetSignupU2FRegisterRequest(token string) (u2fRegisterRequest *
 	return &u2fRegReq, nil
 }
 
+// CreateUserWithoutSecondFactor validates a given token creates a user
+// with the given password and deletes the token afterwards.
+func (c *Client) CreateUserWithoutSecondFactor(token string, password string) (services.WebSession, error) {
+	out, err := c.PostJSON(c.Endpoint("signuptokens", "users"), createLocalUserReq{
+		Token:    token,
+		Password: password,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return services.GetWebSessionMarshaler().UnmarshalWebSession(out.Bytes())
+}
+
 // CreateUserWithToken creates account with provided token and password.
 // Account username and OTP key are taken from token data.
 // Deletes token after account creation.
 func (c *Client) CreateUserWithToken(token, password, otpToken string) (services.WebSession, error) {
-	out, err := c.PostJSON(c.Endpoint("signuptokens", "users"), createUserWithTokenReq{
+	out, err := c.PostJSON(c.Endpoint("signuptokens", "users"), createLocalUserReq{
 		Token:    token,
 		Password: password,
 		OTPToken: otpToken,
@@ -1336,6 +1349,10 @@ type IdentityService interface {
 	// SignIn checks if the web access password is valid, and if it is valid
 	// returns a secure web session id.
 	SignIn(user string, password []byte) (services.WebSession, error)
+
+	// CreateUserWithoutSecondFactor validates a given token creates a user
+	// with the given password and deletes the token afterwards.
+	CreateUserWithoutSecondFactor(token string, password string) (services.WebSession, error)
 
 	// CreateUserWithToken creates account with provided token and password.
 	// Account username and OTP key are taken from token data.

@@ -17,6 +17,7 @@ limitations under the License.
 package web
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -293,7 +294,7 @@ func (s *sessionCache) AuthWithU2FSignResponse(user string, response *u2f.SignRe
 }
 
 func (s *sessionCache) GetCertificate(c client.CreateSSHCertReq) (*client.SSHLoginResponse, error) {
-	method, err := auth.NewWebPasswordAuth(c.User, []byte(c.Password), c.OTPToken)
+	method, err := auth.NewWebPasswordAndTokenAuth(c.User, []byte(c.Password), c.OTPToken)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -381,8 +382,27 @@ func (s *sessionCache) CreateNewUser(token, password, otpToken string) (services
 	}
 	defer clt.Close()
 
-	sess, err := clt.CreateUserWithToken(token, password, otpToken)
-	return sess, trace.Wrap(err)
+	cap, err := clt.GetClusterAuthPreference()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	fmt.Printf("cap.GetSecondFactor(): %v\n", cap.GetSecondFactor())
+
+	var webSession services.WebSession
+
+	switch cap.GetSecondFactor() {
+	case "off":
+		webSession, err = clt.CreateUserWithoutSecondFactor(token, password)
+		fmt.Printf("CreateUserWithoutSecondFactor: webSession: %v\n", webSession)
+	case "otp", "totp", "hotp":
+		webSession, err = clt.CreateUserWithToken(token, password, otpToken)
+		fmt.Printf("CreateUserWithToken: webSession: %v\n", webSession)
+	}
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return webSession, nil
 }
 
 func (s *sessionCache) CreateNewU2FUser(token string, password string, u2fRegisterResponse u2f.RegisterResponse) (services.WebSession, error) {
